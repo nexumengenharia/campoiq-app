@@ -129,7 +129,7 @@ campoiq-app/
 
 ## Documentação adicional
 
-- [docs/DEPLOY.md](docs/DEPLOY.md) — passo a passo detalhado de deploy
+- [docs/DEPLOY.md](docs/DEPLOY.md) — passo a passo detalhado de deploy 
 - [docs/POWERBI.md](docs/POWERBI.md) — guia de conexão com Power BI e queries prontas
 - [docs/DATA-MODEL.md](docs/DATA-MODEL.md) — diagrama do modelo de dados e explicação ISO 14224
 
