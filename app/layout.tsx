@@ -3,8 +3,8 @@ import './globals.css';
 import { Header } from '@/components/Header';
 
 export const metadata: Metadata = {
-  title: 'CampoIQ — Captura de Inteligencia de Campo',
-  description: 'Gestao de manutencao industrial com engenharia de confiabilidade integrada',
+  title: 'Passagem de Turno GRD',
+  description: 'App de passagem de turno e gestao de manutencao - GRD',
 };
 
 export const viewport: Viewport = {

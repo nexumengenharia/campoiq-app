@@ -107,11 +107,15 @@ export function AssetHistoryModal({ asset, currentStatus, onClose }: Props) {
               <span className="text-2xl font-bold">{asset.tag}</span>
               <span
                 className={`text-xs px-2 py-0.5 rounded border ${
-                  STATUS_CLASS[currentStatus as keyof typeof STATUS_CLASS] ||
-                  'bg-green-50 text-green-900 border-green-300'
+                  currentStatus === 'EM_MANUTENCAO'
+                    ? 'bg-amber-50 text-amber-900 border-amber-300'
+                    : STATUS_CLASS[currentStatus as keyof typeof STATUS_CLASS] ||
+                      'bg-green-50 text-green-900 border-green-300'
                 }`}
               >
-                {STATUS_LABEL[currentStatus as keyof typeof STATUS_LABEL] || 'Operando'}
+                {currentStatus === 'EM_MANUTENCAO'
+                  ? 'Em Manutencao'
+                  : STATUS_LABEL[currentStatus as keyof typeof STATUS_LABEL] || 'Operando'}
               </span>
             </div>
             <div className="text-xs text-slate-300">{asset.description || asset.fleet?.name}</div>

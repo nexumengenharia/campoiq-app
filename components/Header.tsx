@@ -22,12 +22,12 @@ export function Header() {
     <header className="bg-slate-900 text-white sticky top-0 z-50 shadow-lg no-print">
       <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center font-bold text-lg">
-            CQ
+          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center font-bold text-base">
+            GRD
           </div>
           <div>
-            <div className="font-bold text-lg leading-none">CampoIQ</div>
-            <div className="text-xs text-slate-400">Captura de Inteligencia de Campo</div>
+            <div className="font-bold text-lg leading-none">Passagem de Turno</div>
+            <div className="text-xs text-slate-400">GRD - Manutencao</div>
           </div>
         </Link>
         <div className="text-xs text-slate-400 hidden sm:block">{today}</div>

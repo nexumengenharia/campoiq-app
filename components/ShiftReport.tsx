@@ -26,25 +26,43 @@ export function ShiftReport({ shift, date, activities, pending }: Props) {
     router.push(`/relatorio?${u.toString()}`);
   }
 
+  function changeDate(d: string) {
+    const u = new URLSearchParams(params);
+    u.set('date', d);
+    router.push(`/relatorio?${u.toString()}`);
+  }
+
   return (
     <>
-      <div className="flex items-center justify-between mb-4 no-print">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4 no-print">
         <div>
-          <h2 className="text-xl font-bold">Relatorio Automatico de Fim de Turno</h2>
+          <h2 className="text-xl font-bold">Relatorio de Passagem de Turno</h2>
           <p className="text-sm text-slate-500">
-            Gerado a partir das atividades registradas durante o turno.
+            Gerado a partir das atividades registradas no turno e data selecionados.
           </p>
         </div>
-        <div className="flex gap-2">
-          <select
-            value={shift}
-            onChange={(e) => changeShift(e.target.value)}
-            className="bg-white border border-slate-300 rounded px-2 py-1 text-sm"
-          >
-            <option value="A">Turno A</option>
-            <option value="B">Turno B</option>
-            <option value="C">Turno C</option>
-          </select>
+        <div className="flex flex-wrap gap-2 items-center">
+          <label className="flex items-center gap-1 text-xs text-slate-600">
+            <span className="font-semibold">Data:</span>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => changeDate(e.target.value)}
+              className="bg-white border border-slate-300 rounded px-2 py-1 text-sm"
+            />
+          </label>
+          <label className="flex items-center gap-1 text-xs text-slate-600">
+            <span className="font-semibold">Turno:</span>
+            <select
+              value={shift}
+              onChange={(e) => changeShift(e.target.value)}
+              className="bg-white border border-slate-300 rounded px-2 py-1 text-sm"
+            >
+              <option value="A">A (07h-15h)</option>
+              <option value="B">B (15h-23h)</option>
+              <option value="C">C (23h-07h)</option>
+            </select>
+          </label>
           <button
             onClick={() => window.print()}
             className="px-3 py-2 text-sm bg-slate-800 text-white rounded hover:bg-slate-900 inline-flex items-center gap-1"

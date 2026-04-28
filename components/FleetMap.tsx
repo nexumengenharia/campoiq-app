@@ -10,22 +10,33 @@ type Props = {
   activeWOs: Pick<WorkOrder, 'id' | 'asset_id' | 'status' | 'om_number'>[];
 };
 
-type EffectiveStatus = WoStatus | 'OPERANDO';
+// Visual: agrupamos PENDENTE + EM_EXECUCAO em "Em Manutencao" no Mapa.
+// (Os status detalhados continuam disponiveis no Kanban e nas outras telas.)
+type EffectiveStatus = 'OPERANDO' | 'EM_MANUTENCAO' | 'AGUARDANDO_PECA';
 
 const EFFECTIVE_LABEL: Record<EffectiveStatus, string> = {
   OPERANDO: 'Operando',
-  ...STATUS_LABEL,
+  EM_MANUTENCAO: 'Em Manutencao',
+  AGUARDANDO_PECA: 'Aguardando Peca',
 };
 
 const EFFECTIVE_CLASS: Record<EffectiveStatus, string> = {
   OPERANDO: 'bg-green-50 text-green-900 border-green-300',
-  ...STATUS_CLASS,
+  EM_MANUTENCAO: 'bg-amber-50 text-amber-900 border-amber-300',
+  AGUARDANDO_PECA: 'bg-orange-50 text-orange-900 border-orange-300',
 };
 
 const EFFECTIVE_DOT: Record<EffectiveStatus, string> = {
   OPERANDO: 'bg-green-500',
-  ...STATUS_DOT,
+  EM_MANUTENCAO: 'bg-amber-500',
+  AGUARDANDO_PECA: 'bg-orange-500',
 };
+
+function mapToEffective(s: WoStatus | undefined): EffectiveStatus {
+  if (s === 'AGUARDANDO_PECA') return 'AGUARDANDO_PECA';
+  if (s === 'PENDENTE' || s === 'EM_EXECUCAO') return 'EM_MANUTENCAO';
+  return 'OPERANDO';
+}
 
 export function FleetMap({ assets, activeWOs }: Props) {
   const [selected, setSelected] = useState<Asset | null>(null);
@@ -35,15 +46,14 @@ export function FleetMap({ assets, activeWOs }: Props) {
     assets.forEach((a) => map.set(a.id, 'OPERANDO'));
     const prio: Record<EffectiveStatus, number> = {
       OPERANDO: 0,
-      CONCLUIDO: 0,
-      PENDENTE: 2,
-      EM_EXECUCAO: 3,
-      AGUARDANDO_PECA: 4,
+      EM_MANUTENCAO: 2,
+      AGUARDANDO_PECA: 3,
     };
     activeWOs.forEach((wo) => {
+      const eff = mapToEffective(wo.status as WoStatus);
       const curr = map.get(wo.asset_id) || 'OPERANDO';
-      if ((prio[wo.status] || 0) > (prio[curr] || 0)) {
-        map.set(wo.asset_id, wo.status as EffectiveStatus);
+      if (prio[eff] > prio[curr]) {
+        map.set(wo.asset_id, eff);
       }
     });
     return map;
@@ -62,7 +72,7 @@ export function FleetMap({ assets, activeWOs }: Props) {
   return (
     <>
       <div className="flex flex-wrap gap-2 mb-4 text-xs">
-        {(['OPERANDO', 'EM_EXECUCAO', 'AGUARDANDO_PECA', 'PENDENTE'] as EffectiveStatus[]).map((s) => (
+        {(['OPERANDO', 'EM_MANUTENCAO', 'AGUARDANDO_PECA'] as EffectiveStatus[]).map((s) => (
           <span key={s} className={`inline-flex items-center gap-1 px-2 py-1 rounded border ${EFFECTIVE_CLASS[s]}`}>
             <span className={`w-2 h-2 rounded-full ${EFFECTIVE_DOT[s]}`} />
             {EFFECTIVE_LABEL[s]}
@@ -77,7 +87,7 @@ export function FleetMap({ assets, activeWOs }: Props) {
           return (
             <div key={code}>
               <h3 className="font-semibold text-slate-700 text-sm mb-2 flex items-center gap-2">
-                <span className="w-6 h-4 text-slate-500" dangerouslySetInnerHTML={{ __html: icon }} />
+                <span className="w-6 h-4 text-slate-500 flex-shrink-0" dangerouslySetInnerHTML={{ __html: icon }} />
                 {fleetName}
                 <span className="text-xs text-slate-400 font-normal">({items.length} ativos)</span>
               </h3>
@@ -88,17 +98,19 @@ export function FleetMap({ assets, activeWOs }: Props) {
                     <button
                       key={eq.id}
                       onClick={() => setSelected(eq)}
-                      className={`text-left border-2 rounded-lg p-3 transition-transform hover:-translate-y-0.5 ${EFFECTIVE_CLASS[status]}`}
+                      className={`flex flex-col items-stretch text-left border-2 rounded-lg p-2 h-[112px] transition-transform hover:-translate-y-0.5 ${EFFECTIVE_CLASS[status]}`}
                     >
                       <div className="flex items-start justify-between mb-1">
-                        <span className="font-bold text-sm">{eq.tag}</span>
-                        <span className={`w-2.5 h-2.5 rounded-full ${EFFECTIVE_DOT[status]}`} />
+                        <span className="font-bold text-sm leading-none">{eq.tag}</span>
+                        <span className={`w-2.5 h-2.5 rounded-full mt-0.5 flex-shrink-0 ${EFFECTIVE_DOT[status]}`} />
                       </div>
-                      <div
-                        className="w-full h-10 mb-1 opacity-80"
-                        dangerouslySetInnerHTML={{ __html: FLEET_ICONS[eq.fleet?.code || ''] || '' }}
-                      />
-                      <div className="text-[10px] font-medium uppercase tracking-wide">
+                      <div className="flex-1 flex items-center justify-center min-h-0 my-1">
+                        <div
+                          className="w-full h-10 opacity-80 flex items-center justify-center"
+                          dangerouslySetInnerHTML={{ __html: FLEET_ICONS[eq.fleet?.code || ''] || '' }}
+                        />
+                      </div>
+                      <div className="text-[10px] font-medium uppercase tracking-wide leading-tight text-center">
                         {EFFECTIVE_LABEL[status]}
                       </div>
                     </button>

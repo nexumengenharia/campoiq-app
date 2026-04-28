@@ -41,6 +41,14 @@ const NEW_OBS: ObsDraft = {
   suggested_deadline: '',
 };
 
+const OTHER = '__OUTRO__';
+
+function localISO(d: Date) {
+  // YYYY-MM-DDTHH:MM em fuso local, formato aceito por <input type="datetime-local">
+  const tzOffset = d.getTimezoneOffset() * 60_000;
+  return new Date(d.getTime() - tzOffset).toISOString().slice(0, 16);
+}
+
 export function ActivityForm({ assets, systems, subsystems }: Props) {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
@@ -48,11 +56,22 @@ export function ActivityForm({ assets, systems, subsystems }: Props) {
 
   const [tag, setTag] = useState('');
   const [om, setOm] = useState('');
+  const [openedAt, setOpenedAt] = useState<string>(localISO(new Date()));
+
+  // Sistema / Subsistema com opção "Outro"
   const [systemId, setSystemId] = useState('');
+  const [systemOther, setSystemOther] = useState('');
   const [subsystemId, setSubsystemId] = useState('');
+  const [subsystemOther, setSubsystemOther] = useState('');
+
+  // Sintoma / Causa / Intervenção com "Outro"
   const [symptom, setSymptom] = useState('');
+  const [symptomOther, setSymptomOther] = useState('');
   const [cause, setCause] = useState('');
+  const [causeOther, setCauseOther] = useState('');
   const [intervention, setIntervention] = useState('');
+  const [interventionOther, setInterventionOther] = useState('');
+
   const [description, setDescription] = useState('');
   const [performedBy, setPerformedBy] = useState('');
   const [status, setStatus] = useState<WoStatus>('EM_EXECUCAO');
@@ -75,6 +94,46 @@ export function ActivityForm({ assets, systems, subsystems }: Props) {
     setObservations((prev) => prev.filter((_, idx) => idx !== i));
   }
 
+  async function ensureSystem(supabase: any): Promise<string | null> {
+    if (systemId && systemId !== OTHER) return systemId;
+    const name = systemOther.trim();
+    if (!name) return null;
+    // Procura por nome (case-insensitive)
+    const { data: existing } = await supabase
+      .from('systems')
+      .select('id')
+      .ilike('name', name)
+      .maybeSingle();
+    if (existing?.id) return existing.id;
+    const { data: ins, error } = await supabase
+      .from('systems')
+      .insert({ name })
+      .select('id')
+      .single();
+    if (error) throw error;
+    return ins.id;
+  }
+
+  async function ensureSubsystem(supabase: any, sysId: string): Promise<string | null> {
+    if (subsystemId && subsystemId !== OTHER) return subsystemId;
+    const name = subsystemOther.trim();
+    if (!name) return null;
+    const { data: existing } = await supabase
+      .from('subsystems')
+      .select('id')
+      .eq('system_id', sysId)
+      .ilike('name', name)
+      .maybeSingle();
+    if (existing?.id) return existing.id;
+    const { data: ins, error } = await supabase
+      .from('subsystems')
+      .insert({ system_id: sysId, name })
+      .select('id')
+      .single();
+    if (error) throw error;
+    return ins.id;
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
@@ -86,34 +145,46 @@ export function ActivityForm({ assets, systems, subsystems }: Props) {
       const asset = assets.find((a) => a.tag === tag.trim());
       if (!asset) throw new Error(`Ativo com tag "${tag}" nao encontrado.`);
 
-      const currentShift = inferShift(new Date());
+      const opened = new Date(openedAt);
+      const usedShift = inferShift(opened);
 
-      // 1) Cria WO
+      // 1) Cria WO com data/hora informada
       const { data: wo, error: woErr } = await supabase
         .from('work_orders')
         .insert({
           om_number: om.trim(),
           asset_id: asset.id,
           status,
-          shift: currentShift,
+          shift: usedShift,
+          opened_at: opened.toISOString(),
+          closed_at: status === 'CONCLUIDO' ? new Date().toISOString() : null,
         })
         .select()
         .single();
       if (woErr) throw woErr;
 
-      // 2) Cria failure_event
-      if (systemId && subsystemId) {
+      // 2) Resolve Sistema/Subsistema (cria se "Outro")
+      const sysId = await ensureSystem(supabase);
+      const subId = sysId ? await ensureSubsystem(supabase, sysId) : null;
+
+      // 3) Resolve Sintoma / Causa / Intervencao (sem tabela - texto direto)
+      const finalSymptom = symptom === OTHER ? symptomOther.trim() : symptom;
+      const finalCause = cause === OTHER ? causeOther.trim() : cause;
+      const finalIntervention = intervention === OTHER ? interventionOther.trim() : intervention;
+
+      // 4) Cria failure_event
+      if (sysId && subId && finalSymptom && finalCause && finalIntervention) {
         await supabase.from('failure_events').insert({
           work_order_id: wo.id,
-          system_id: systemId,
-          subsystem_id: subsystemId,
-          symptom,
-          presumed_cause: cause,
-          intervention_type: intervention,
+          system_id: sysId,
+          subsystem_id: subId,
+          symptom: finalSymptom,
+          presumed_cause: finalCause,
+          intervention_type: finalIntervention,
         });
       }
 
-      // 3) Cria maintenance_action
+      // 5) Cria maintenance_action
       if (description.trim()) {
         await supabase.from('maintenance_actions').insert({
           work_order_id: wo.id,
@@ -122,7 +193,7 @@ export function ActivityForm({ assets, systems, subsystems }: Props) {
         });
       }
 
-      // 4) Pecas utilizadas (opcional)
+      // 6) Pecas utilizadas (opcional)
       if (partsText.trim()) {
         const parts = partsText.split(/[;\n]/).map((s) => s.trim()).filter(Boolean);
         for (const p of parts) {
@@ -135,7 +206,7 @@ export function ActivityForm({ assets, systems, subsystems }: Props) {
         }
       }
 
-      // 5) Observacoes estruturadas
+      // 7) Observacoes estruturadas
       for (const obs of observations) {
         if (!obs.description.trim()) continue;
         await supabase.from('observations').insert({
@@ -150,7 +221,7 @@ export function ActivityForm({ assets, systems, subsystems }: Props) {
         });
       }
 
-      // 6) Upload de fotos para Storage (bucket 'photos')
+      // 8) Upload de fotos para Storage (bucket 'photos')
       for (let i = 0; i < photos.length; i++) {
         const file = photos[i];
         const path = `wo-${wo.id}/img-${i + 1}-${Date.now()}.${file.name.split('.').pop()}`;
@@ -182,7 +253,7 @@ export function ActivityForm({ assets, systems, subsystems }: Props) {
       )}
 
       {/* Identificacao */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div>
           <label className="block text-xs font-semibold text-slate-700 mb-1">Tag do Ativo *</label>
           <input
@@ -209,10 +280,20 @@ export function ActivityForm({ assets, systems, subsystems }: Props) {
             className="w-full px-3 py-2 border border-slate-300 rounded text-base"
           />
         </div>
+        <div>
+          <label className="block text-xs font-semibold text-slate-700 mb-1">Data e hora de abertura *</label>
+          <input
+            type="datetime-local"
+            value={openedAt}
+            onChange={(e) => setOpenedAt(e.target.value)}
+            required
+            className="w-full px-3 py-2 border border-slate-300 rounded text-base"
+          />
+        </div>
       </div>
 
-      {/* Sistema / Subsistema */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* Sistema / Subsistema (com Outro) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className="block text-xs font-semibold text-slate-700 mb-1">Sistema *</label>
           <select
@@ -223,7 +304,17 @@ export function ActivityForm({ assets, systems, subsystems }: Props) {
           >
             <option value="">Selecione...</option>
             {systems.map((s) => (<option key={s.id} value={s.id}>{s.name}</option>))}
+            <option value={OTHER}>Outro (digitar)</option>
           </select>
+          {systemId === OTHER && (
+            <input
+              value={systemOther}
+              onChange={(e) => setSystemOther(e.target.value)}
+              placeholder="Ex: Sistema AdBlue"
+              required
+              className="w-full mt-2 px-3 py-2 border border-amber-400 rounded text-base bg-amber-50"
+            />
+          )}
         </div>
         <div>
           <label className="block text-xs font-semibold text-slate-700 mb-1">Subsistema *</label>
@@ -236,15 +327,49 @@ export function ActivityForm({ assets, systems, subsystems }: Props) {
           >
             <option value="">{systemId ? 'Selecione...' : 'Selecione o sistema primeiro'}</option>
             {subOptions.map((s) => (<option key={s.id} value={s.id}>{s.name}</option>))}
+            {systemId && <option value={OTHER}>Outro (digitar)</option>}
           </select>
+          {subsystemId === OTHER && (
+            <input
+              value={subsystemOther}
+              onChange={(e) => setSubsystemOther(e.target.value)}
+              placeholder="Ex: Tanque ARLA 32"
+              required
+              className="w-full mt-2 px-3 py-2 border border-amber-400 rounded text-base bg-amber-50"
+            />
+          )}
         </div>
       </div>
 
-      {/* Sintoma / Causa / Intervencao */}
+      {/* Sintoma / Causa / Intervencao (com Outro) */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <SelectField label="Sintoma *" value={symptom} onChange={setSymptom} options={SYMPTOMS} required />
-        <SelectField label="Causa *"   value={cause}   onChange={setCause}   options={CAUSES}   required />
-        <SelectField label="Intervencao *" value={intervention} onChange={setIntervention} options={INTERVENTIONS} required />
+        <SelectFieldOther
+          label="Sintoma *"
+          value={symptom}
+          other={symptomOther}
+          onChange={setSymptom}
+          onChangeOther={setSymptomOther}
+          options={SYMPTOMS}
+          required
+        />
+        <SelectFieldOther
+          label="Causa *"
+          value={cause}
+          other={causeOther}
+          onChange={setCause}
+          onChangeOther={setCauseOther}
+          options={CAUSES}
+          required
+        />
+        <SelectFieldOther
+          label="Intervencao *"
+          value={intervention}
+          other={interventionOther}
+          onChange={setIntervention}
+          onChangeOther={setInterventionOther}
+          options={INTERVENTIONS}
+          required
+        />
       </div>
 
       {/* Descricao livre */}
@@ -255,7 +380,7 @@ export function ActivityForm({ assets, systems, subsystems }: Props) {
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           className="w-full px-3 py-2 border border-slate-300 rounded text-sm"
-          placeholder="Ex: Identificamos que o sensor do filtro de combustivel nao estava plugado..."
+          placeholder="Descreva o que foi feito - o que verificou, o que substituiu, o que ajustou..."
         />
       </div>
 
@@ -265,12 +390,12 @@ export function ActivityForm({ assets, systems, subsystems }: Props) {
         <input
           value={performedBy}
           onChange={(e) => setPerformedBy(e.target.value)}
-          placeholder="Ex: Andre Neto, Joelson Ferreira"
+          placeholder="Nome do(s) executante(s)"
           className="w-full px-3 py-2 border border-slate-300 rounded text-sm"
         />
       </div>
 
-      {/* OBSERVACOES / PENDENCIAS TECNICAS (substituiu pecas utilizadas) */}
+      {/* OBSERVACOES / PENDENCIAS TECNICAS */}
       <div className="bg-amber-50 border border-amber-200 rounded p-3">
         <div className="flex items-center justify-between mb-2">
           <label className="block text-sm font-bold text-amber-900">
@@ -285,7 +410,7 @@ export function ActivityForm({ assets, systems, subsystems }: Props) {
           </button>
         </div>
         <p className="text-xs text-amber-800 mb-3">
-          Registre informacoes acionaveis para PCM, Inspecao ou Engenharia — ex.: "foi feito arranjo
+          Registre informacoes acionaveis para PCM, Inspecao ou Engenharia - ex.: "foi feito arranjo
           temporario, precisa resolver com chegada das pecas", "mangueira xxx proxima de romper",
           "sera necessario trocar o alternador".
         </p>
@@ -349,7 +474,7 @@ export function ActivityForm({ assets, systems, subsystems }: Props) {
         </div>
       </div>
 
-      {/* Pecas utilizadas - opcional, mais discreto */}
+      {/* Pecas utilizadas - opcional */}
       <details className="text-sm">
         <summary className="cursor-pointer text-slate-600 font-medium">
           Pecas utilizadas (opcional)
@@ -429,9 +554,17 @@ export function ActivityForm({ assets, systems, subsystems }: Props) {
   );
 }
 
-function SelectField({
-  label, value, onChange, options, required,
-}: { label: string; value: string; onChange: (v: string) => void; options: string[]; required?: boolean; }) {
+function SelectFieldOther({
+  label, value, other, onChange, onChangeOther, options, required,
+}: {
+  label: string;
+  value: string;
+  other: string;
+  onChange: (v: string) => void;
+  onChangeOther: (v: string) => void;
+  options: string[];
+  required?: boolean;
+}) {
   return (
     <div>
       <label className="block text-xs font-semibold text-slate-700 mb-1">{label}</label>
@@ -443,7 +576,17 @@ function SelectField({
       >
         <option value="">Selecione...</option>
         {options.map((o) => (<option key={o} value={o}>{o}</option>))}
+        <option value={OTHER}>Outro (digitar)</option>
       </select>
+      {value === OTHER && (
+        <input
+          value={other}
+          onChange={(e) => onChangeOther(e.target.value)}
+          placeholder="Digite a opcao..."
+          required
+          className="w-full mt-2 px-3 py-2 border border-amber-400 rounded text-sm bg-amber-50"
+        />
+      )}
     </div>
   );
 }

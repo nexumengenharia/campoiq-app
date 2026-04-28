@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Search, Filter, Calendar, Clock, AlertTriangle, ChevronDown, Download } from 'lucide-react';
+import { Search, Calendar, Clock, AlertTriangle, ChevronDown, ChevronRight, Download } from 'lucide-react';
 import { STATUS_CLASS, STATUS_LABEL } from '@/lib/constants';
 
 type Asset = { id: string; tag: string; fleet?: { name: string } };
@@ -42,6 +42,7 @@ export function HistoryExplorer({ wos, assets, systems }: Props) {
   const [filterSeverity, setFilterSeverity] = useState('');
   const [filterPeriod, setFilterPeriod] = useState<'7' | '30' | '90'>('90');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [openDays, setOpenDays] = useState<Set<string>>(new Set());
 
   const filtered = useMemo(() => {
     const days = parseInt(filterPeriod);
@@ -95,6 +96,20 @@ export function HistoryExplorer({ wos, assets, systems }: Props) {
     const next = new Set(expanded);
     next.has(id) ? next.delete(id) : next.add(id);
     setExpanded(next);
+  }
+
+  function toggleDay(day: string) {
+    const next = new Set(openDays);
+    next.has(day) ? next.delete(day) : next.add(day);
+    setOpenDays(next);
+  }
+
+  function expandAllDays() {
+    setOpenDays(new Set(grouped.map(([d]) => d)));
+  }
+
+  function collapseAllDays() {
+    setOpenDays(new Set());
   }
 
   function exportCSV() {
@@ -234,14 +249,50 @@ export function HistoryExplorer({ wos, assets, systems }: Props) {
           Nenhuma corretiva encontrada com os filtros atuais.
         </div>
       ) : (
-        <div className="space-y-4">
-          {grouped.map(([day, dayWos]) => (
-            <section key={day}>
-              <h3 className="text-xs font-bold text-slate-700 mb-2 sticky top-[180px] z-20 bg-slate-50 py-1">
-                <Calendar size={12} className="inline mr-1" /> {day}
-                <span className="ml-2 text-slate-400 font-normal">({dayWos.length} OMs)</span>
-              </h3>
-              <div className="space-y-2 ml-4 border-l-2 border-slate-200 pl-4 relative">
+        <>
+          <div className="flex justify-end gap-2 mb-2 text-[11px]">
+            <button
+              onClick={expandAllDays}
+              className="px-2 py-1 text-slate-600 hover:text-slate-900 underline-offset-2 hover:underline"
+            >
+              Expandir todos
+            </button>
+            <span className="text-slate-300">·</span>
+            <button
+              onClick={collapseAllDays}
+              className="px-2 py-1 text-slate-600 hover:text-slate-900 underline-offset-2 hover:underline"
+            >
+              Recolher todos
+            </button>
+          </div>
+          <div className="space-y-2">
+          {grouped.map(([day, dayWos]) => {
+            const isOpenDay = openDays.has(day);
+            const dayCriticas = dayWos.filter((w) => w.failure_events?.[0]?.severity === 'Critico').length;
+            return (
+            <section key={day} className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+              <button
+                onClick={() => toggleDay(day)}
+                className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-slate-50 text-left"
+              >
+                <div className="flex items-center gap-2">
+                  {isOpenDay ? (
+                    <ChevronDown size={14} className="text-slate-500" />
+                  ) : (
+                    <ChevronRight size={14} className="text-slate-500" />
+                  )}
+                  <Calendar size={14} className="text-slate-500" />
+                  <span className="font-bold text-sm text-slate-800">{day}</span>
+                  <span className="text-xs text-slate-500 font-normal">({dayWos.length} OMs)</span>
+                  {dayCriticas > 0 && (
+                    <span className="inline-flex items-center gap-1 text-[10px] bg-red-100 text-red-800 px-1.5 py-0.5 rounded">
+                      <AlertTriangle size={10} /> {dayCriticas} critica{dayCriticas !== 1 ? 's' : ''}
+                    </span>
+                  )}
+                </div>
+              </button>
+              {isOpenDay && (
+              <div className="space-y-2 ml-6 border-l-2 border-slate-200 pl-4 relative pb-3 pr-3">
                 {dayWos.map((w) => {
                   const fe = w.failure_events?.[0];
                   const ma = w.maintenance_actions?.[0];
@@ -359,9 +410,12 @@ export function HistoryExplorer({ wos, assets, systems }: Props) {
                   );
                 })}
               </div>
+              )}
             </section>
-          ))}
-        </div>
+            );
+          })}
+          </div>
+        </>
       )}
     </>
   );
