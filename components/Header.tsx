@@ -2,14 +2,16 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Map, Kanban, PlusSquare, FileText, ClipboardList } from 'lucide-react';
+import { Map, Kanban, PlusSquare, FileText, ClipboardList, History, Download } from 'lucide-react';
 
 const tabs = [
   { href: '/',            label: 'Mapa da Frota',   Icon: Map },
   { href: '/kanban',      label: 'Kanban de Turno', Icon: Kanban },
   { href: '/nova',        label: 'Nova Atividade',  Icon: PlusSquare },
+  { href: '/historico',   label: 'Historico',       Icon: History },
   { href: '/observacoes', label: 'Observacoes',     Icon: ClipboardList },
   { href: '/relatorio',   label: 'Relatorio',       Icon: FileText },
+  { href: '/exportar',    label: 'Exportar',        Icon: Download },
 ];
 
 export function Header() {

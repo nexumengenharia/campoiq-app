@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { FLEET_ICONS, STATUS_DOT, STATUS_CLASS, STATUS_LABEL } from '@/lib/constants';
 import type { Asset, Fleet, WorkOrder, WoStatus } from '@/lib/types';
+import { AssetHistoryModal } from './AssetHistoryModal';
 
 type Props = {
   assets: (Asset & { fleet: Fleet })[];
@@ -109,30 +110,11 @@ export function FleetMap({ assets, activeWOs }: Props) {
         })}
       </div>
 
-      {selected && (
-        <div
-          className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50"
-          onClick={() => setSelected(null)}
-        >
-          <div
-            className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-lg font-bold mb-2">Equipamento {selected.tag}</h3>
-            <p className="text-sm text-slate-600 mb-1">{selected.description}</p>
-            <p className="text-xs text-slate-500 mb-3">Frota: {selected.fleet?.name}</p>
-            <p className="text-xs text-slate-600">
-              Status atual: <strong>{EFFECTIVE_LABEL[statusByAsset.get(selected.id) || 'OPERANDO']}</strong>
-            </p>
-            <button
-              onClick={() => setSelected(null)}
-              className="mt-4 w-full px-3 py-2 bg-slate-800 text-white rounded text-sm"
-            >
-              Fechar
-            </button>
-          </div>
-        </div>
-      )}
+      <AssetHistoryModal
+        asset={selected as (Asset & { fleet?: Fleet }) | null}
+        currentStatus={selected ? statusByAsset.get(selected.id) || 'OPERANDO' : 'OPERANDO'}
+        onClose={() => setSelected(null)}
+      />
     </>
   );
 }

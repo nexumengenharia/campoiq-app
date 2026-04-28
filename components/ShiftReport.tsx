@@ -198,26 +198,16 @@ export function ShiftReport({ shift, date, activities, pending }: Props) {
           )}
         </section>
 
-        <section className="mb-6 bg-slate-50 border border-slate-200 rounded p-4">
-          <h3 className="font-semibold text-sm text-slate-700 mb-2">
-            Perfil de Perdas (apos cruzamento com sistema de tempos)
-          </h3>
-          <div className="text-xs text-slate-600">
-            O relatorio final — enviado a Engenharia de Confiabilidade — incluira automaticamente:
-            tempos exatos de <strong>parada</strong>, <strong>duracao efetiva</strong>,{' '}
-            <strong>liberacao</strong>, <strong>MTTR</strong> por atividade, <strong>MTBF</strong> por ativo,
-            ranking de Pareto dos bad actors e tendencia de falha por sistema/subsistema.
-          </div>
-        </section>
-
         <footer className="border-t border-slate-200 pt-4 grid grid-cols-2 gap-6 text-xs">
           <div>
             <div className="border-b border-slate-400 pb-8 mb-1" />
-            <div className="font-semibold">Supervisor do Turno {shift}</div>
+            <div className="font-semibold">Fred Jozair</div>
+            <div className="text-slate-500">Gerente Tecnico da Frota</div>
           </div>
           <div>
             <div className="border-b border-slate-400 pb-8 mb-1" />
-            <div className="font-semibold">Recebido - Turno Seguinte</div>
+            <div className="font-semibold">Nilton Ribeiro</div>
+            <div className="text-slate-500">Engenheiro da Frota</div>
           </div>
         </footer>
       </article>

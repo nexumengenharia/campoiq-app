@@ -21,13 +21,8 @@ export default async function MapaPage() {
 
   return (
     <>
-      <div className="bg-blue-50 border-l-4 border-blue-500 p-3 rounded mb-6 text-sm text-blue-900">
-        <strong>Integracao externa:</strong> os dados capturados aqui serao cruzados com o sistema de tempos
-        de parada/liberacao para compor o <strong>perfil de perdas</strong> — com tendencias, padroes de falha
-        e relatorios de "bad actors" alimentados automaticamente por este app.
-      </div>
-
       <h2 className="text-xl font-bold mb-4">Frota — Status Operacional em Tempo Real</h2>
+      <p className="text-xs text-slate-500 mb-4">Clique em um equipamento para ver o historico de corretivas dos ultimos 60 dias.</p>
 
       <FleetMap
         assets={(assets || []) as (Asset & { fleet: Fleet })[]}
