@@ -1,7 +1,8 @@
 // Tipos do dominio CampoIQ - refletem o schema Supabase
 
 export type WoStatus = 'PENDENTE' | 'EM_EXECUCAO' | 'CONCLUIDO' | 'AGUARDANDO_PECA';
-export type Shift = 'A' | 'B' | 'C';
+export type Shift = 'A' | 'B' | 'C' | 'D';
+export type MaintenanceType = 'CORRETIVA' | 'PREVENTIVA';
 
 export type ObservationType =
   | 'ARRANJO_TEMPORARIO'
@@ -54,12 +55,17 @@ export interface WorkOrder {
   asset_id: string;
   status: WoStatus;
   shift: Shift | null;
+  maintenance_type: MaintenanceType;
   opened_at: string;
   closed_at: string | null;
   carried_from_shift: Shift | null;
   carried_from_date: string | null;
   carry_note: string | null;
   mttr_minutes: number | null;
+  worked_in_shifts: Shift[] | null;
+  worked_in_dates: string[] | null;
+  last_action_shift: Shift | null;
+  last_action_date: string | null;
   created_at: string;
   updated_at: string;
   // Joins

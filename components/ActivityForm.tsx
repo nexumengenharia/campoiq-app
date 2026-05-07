@@ -11,12 +11,18 @@ import {
   OBSERVATION_TYPE_LABEL,
   OBSERVATION_TARGET_LABEL,
   OBSERVATION_PRIORITY_LABEL,
+  SHIFTS,
+  SHIFT_LABEL,
+  MAINT_TYPE_LABEL,
+  inferShift,
 } from '@/lib/constants';
 import type {
   ObservationType,
   ObservationTarget,
   ObservationPriority,
   WoStatus,
+  Shift,
+  MaintenanceType,
 } from '@/lib/types';
 
 type Props = {
@@ -57,6 +63,8 @@ export function ActivityForm({ assets, systems, subsystems }: Props) {
   const [tag, setTag] = useState('');
   const [om, setOm] = useState('');
   const [openedAt, setOpenedAt] = useState<string>(localISO(new Date()));
+  const [shift, setShift] = useState<Shift>(inferShift(new Date()));
+  const [maintenanceType, setMaintenanceType] = useState<MaintenanceType>('CORRETIVA');
 
   // Sistema / Subsistema com opção "Outro"
   const [systemId, setSystemId] = useState('');
@@ -146,7 +154,7 @@ export function ActivityForm({ assets, systems, subsystems }: Props) {
       if (!asset) throw new Error(`Ativo com tag "${tag}" nao encontrado.`);
 
       const opened = new Date(openedAt);
-      const usedShift = inferShift(opened);
+      const openedDateISO = opened.toISOString().slice(0, 10);
 
       // 1) Cria WO com data/hora informada
       const { data: wo, error: woErr } = await supabase
@@ -155,9 +163,14 @@ export function ActivityForm({ assets, systems, subsystems }: Props) {
           om_number: om.trim(),
           asset_id: asset.id,
           status,
-          shift: usedShift,
+          shift,
+          maintenance_type: maintenanceType,
           opened_at: opened.toISOString(),
           closed_at: status === 'CONCLUIDO' ? new Date().toISOString() : null,
+          worked_in_shifts: [shift],
+          worked_in_dates: [openedDateISO],
+          last_action_shift: shift,
+          last_action_date: openedDateISO,
         })
         .select()
         .single();
@@ -289,6 +302,63 @@ export function ActivityForm({ assets, systems, subsystems }: Props) {
             required
             className="w-full px-3 py-2 border border-slate-300 rounded text-base"
           />
+        </div>
+      </div>
+
+      {/* Turno + Tipo de Manutencao */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-semibold text-slate-700 mb-1">Turno *</label>
+          <div className="grid grid-cols-4 gap-1">
+            {SHIFTS.map((s) => (
+              <label
+                key={s}
+                className={`flex items-center justify-center gap-1 p-2 border rounded cursor-pointer text-sm font-medium ${
+                  shift === s ? 'border-orange-500 bg-orange-50 text-orange-900' : 'border-slate-300 bg-white text-slate-600'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="shift"
+                  value={s}
+                  checked={shift === s}
+                  onChange={() => setShift(s)}
+                  className="sr-only"
+                />
+                {s}
+              </label>
+            ))}
+          </div>
+          <p className="text-[10px] text-slate-500 mt-1">
+            Atual: {SHIFT_LABEL[shift]}
+          </p>
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-slate-700 mb-1">Tipo de manutencao *</label>
+          <div className="grid grid-cols-2 gap-1">
+            {(['CORRETIVA', 'PREVENTIVA'] as MaintenanceType[]).map((t) => (
+              <label
+                key={t}
+                className={`flex items-center justify-center gap-2 p-2 border rounded cursor-pointer text-sm font-medium ${
+                  maintenanceType === t
+                    ? t === 'CORRETIVA'
+                      ? 'border-red-500 bg-red-50 text-red-900'
+                      : 'border-blue-500 bg-blue-50 text-blue-900'
+                    : 'border-slate-300 bg-white text-slate-600'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="maintenance-type"
+                  value={t}
+                  checked={maintenanceType === t}
+                  onChange={() => setMaintenanceType(t)}
+                  className="sr-only"
+                />
+                {MAINT_TYPE_LABEL[t]}
+              </label>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -608,9 +678,3 @@ function LabeledSelect({
   );
 }
 
-function inferShift(d: Date): 'A' | 'B' | 'C' {
-  const h = d.getHours();
-  if (h >= 7 && h < 15) return 'A';
-  if (h >= 15 && h < 23) return 'B';
-  return 'C';
-}

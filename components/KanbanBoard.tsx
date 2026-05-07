@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Camera, Undo2, AlertTriangle, X, CheckCircle2, Clock, PackageX, AlertCircle, Save, Loader2 } from 'lucide-react';
-import type { WoStatus } from '@/lib/types';
+import { SHIFTS, SHIFT_LABEL, inferShift } from '@/lib/constants';
+import type { WoStatus, Shift } from '@/lib/types';
 
 type WO = any;
 
@@ -140,8 +141,26 @@ function Card({ wo, onClick }: { wo: WO; onClick: (w: WO) => void }) {
       onClick={() => onClick(wo)}
       className="w-full text-left bg-white rounded border border-slate-200 p-3 shadow-sm hover:shadow-md hover:border-orange-300 transition-all"
     >
-      <div className="flex items-center justify-between mb-1">
-        <span className="font-bold text-base">{wo.asset?.tag}</span>
+      <div className="flex items-center justify-between mb-1 gap-1 flex-wrap">
+        <div className="flex items-center gap-1.5">
+          <span className="font-bold text-base">{wo.asset?.tag}</span>
+          {wo.maintenance_type && (
+            <span
+              className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                wo.maintenance_type === 'PREVENTIVA'
+                  ? 'bg-blue-100 text-blue-800'
+                  : 'bg-red-100 text-red-800'
+              }`}
+            >
+              {wo.maintenance_type === 'PREVENTIVA' ? 'PREV' : 'CORR'}
+            </span>
+          )}
+          {wo.shift && (
+            <span className="text-[10px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded">
+              T{wo.shift}
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-1">
           {wo.carried_from_shift && (
             <span className="text-[10px] bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded font-semibold inline-flex items-center gap-0.5">
@@ -189,6 +208,8 @@ function StatusEditor({ wo, onClose }: { wo: WO; onClose: () => void }) {
   const [status, setStatus] = useState<WoStatus>(wo.status);
   const [carryNote, setCarryNote] = useState<string>(wo.carry_note || '');
   const [extraDesc, setExtraDesc] = useState<string>('');
+  const [executorShift, setExecutorShift] = useState<Shift>(inferShift(new Date()));
+  const [executorName, setExecutorName] = useState<string>('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -197,26 +218,48 @@ function StatusEditor({ wo, onClose }: { wo: WO; onClose: () => void }) {
     setErr(null);
     try {
       const supabase = createClient();
+      const today = new Date();
+      const todayISO = today.toISOString().slice(0, 10);
+
+      // Acumula o turno/data atual em worked_in_shifts/dates (sem duplicar)
+      const prevShifts: string[] = wo.worked_in_shifts || [];
+      const prevDates: string[] = wo.worked_in_dates || [];
+      const newShifts = [...prevShifts];
+      const newDates = [...prevDates];
+      // Marca como (shift, date) - se ja tem o par, nao duplica
+      const pairKey = `${executorShift}|${todayISO}`;
+      const existingPairs = new Set(prevShifts.map((s, i) => `${s}|${prevDates[i] || ''}`));
+      if (!existingPairs.has(pairKey)) {
+        newShifts.push(executorShift);
+        newDates.push(todayISO);
+      }
+
       const update: any = {
         status,
         carry_note: carryNote || null,
+        last_action_shift: executorShift,
+        last_action_date: todayISO,
+        worked_in_shifts: newShifts,
+        worked_in_dates: newDates,
       };
-      // Se mudou pra CONCLUIDO e ainda nao tinha closed_at, marca agora
       if (status === 'CONCLUIDO' && !wo.closed_at) {
-        update.closed_at = new Date().toISOString();
+        update.closed_at = today.toISOString();
       }
-      // Se voltou pra outro status, limpa closed_at (caso reabra OM)
       if (status !== 'CONCLUIDO' && wo.closed_at) {
         update.closed_at = null;
       }
       const { error } = await supabase.from('work_orders').update(update).eq('id', wo.id);
       if (error) throw error;
 
-      // Anexa nota adicional como nova maintenance_action (audit trail)
-      if (extraDesc.trim()) {
+      // Anexa nota como nova maintenance_action (audit trail por turno)
+      if (extraDesc.trim() || status !== wo.status) {
+        const note = extraDesc.trim()
+          ? `[turno ${executorShift} -> ${status}] ${extraDesc.trim()}`
+          : `[turno ${executorShift} -> ${status}]`;
         await supabase.from('maintenance_actions').insert({
           work_order_id: wo.id,
-          description: `[atualizacao de status -> ${status}] ${extraDesc.trim()}`,
+          description: note,
+          performed_by: executorName ? [executorName] : [],
         });
       }
       onClose();
@@ -274,6 +317,50 @@ function StatusEditor({ wo, onClose }: { wo: WO; onClose: () => void }) {
                   </button>
                 );
               })}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Seu turno *
+              </label>
+              <div className="grid grid-cols-4 gap-1">
+                {SHIFTS.map((s) => (
+                  <label
+                    key={s}
+                    className={`flex items-center justify-center p-1.5 border rounded cursor-pointer text-sm font-medium ${
+                      executorShift === s
+                        ? 'border-orange-500 bg-orange-50 text-orange-900'
+                        : 'border-slate-300 bg-white text-slate-600'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="executor-shift"
+                      value={s}
+                      checked={executorShift === s}
+                      onChange={() => setExecutorShift(s)}
+                      className="sr-only"
+                    />
+                    {s}
+                  </label>
+                ))}
+              </div>
+              <p className="text-[10px] text-slate-500 mt-0.5">
+                {SHIFT_LABEL[executorShift]} - acao contara nesse turno
+              </p>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Seu nome (opcional)
+              </label>
+              <input
+                value={executorName}
+                onChange={(e) => setExecutorName(e.target.value)}
+                placeholder="Quem fez a acao"
+                className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm"
+              />
             </div>
           </div>
 

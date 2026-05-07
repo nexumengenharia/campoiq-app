@@ -1,17 +1,24 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Printer, Send, Camera } from 'lucide-react';
-import { STATUS_CLASS, STATUS_LABEL, OBSERVATION_PRIORITY_CLASS, OBSERVATION_PRIORITY_LABEL, OBSERVATION_TARGET_LABEL, OBSERVATION_TYPE_LABEL } from '@/lib/constants';
+import { Printer, Send, Camera, Undo2 } from 'lucide-react';
+import {
+  STATUS_CLASS, STATUS_LABEL,
+  OBSERVATION_PRIORITY_CLASS, OBSERVATION_PRIORITY_LABEL,
+  OBSERVATION_TARGET_LABEL, OBSERVATION_TYPE_LABEL,
+  SHIFTS, SHIFT_LABEL, MAINT_TYPE_LABEL, MAINT_TYPE_CLASS,
+} from '@/lib/constants';
+import type { Shift, MaintenanceType } from '@/lib/types';
 
 type Props = {
-  shift: 'A' | 'B' | 'C';
+  shift: Shift;
   date: string;
+  maintenanceTypeFilter?: '' | MaintenanceType;
   activities: any[];
   pending: any[];
 };
 
-export function ShiftReport({ shift, date, activities, pending }: Props) {
+export function ShiftReport({ shift, date, activities, pending, maintenanceTypeFilter = '' }: Props) {
   const router = useRouter();
   const params = useSearchParams();
 
@@ -29,6 +36,13 @@ export function ShiftReport({ shift, date, activities, pending }: Props) {
   function changeDate(d: string) {
     const u = new URLSearchParams(params);
     u.set('date', d);
+    router.push(`/relatorio?${u.toString()}`);
+  }
+
+  function changeType(t: string) {
+    const u = new URLSearchParams(params);
+    if (t) u.set('type', t);
+    else   u.delete('type');
     router.push(`/relatorio?${u.toString()}`);
   }
 
@@ -58,9 +72,21 @@ export function ShiftReport({ shift, date, activities, pending }: Props) {
               onChange={(e) => changeShift(e.target.value)}
               className="bg-white border border-slate-300 rounded px-2 py-1 text-sm"
             >
-              <option value="A">A (07h-15h)</option>
-              <option value="B">B (15h-23h)</option>
-              <option value="C">C (23h-07h)</option>
+              {SHIFTS.map((s) => (
+                <option key={s} value={s}>{SHIFT_LABEL[s]}</option>
+              ))}
+            </select>
+          </label>
+          <label className="flex items-center gap-1 text-xs text-slate-600">
+            <span className="font-semibold">Tipo:</span>
+            <select
+              value={maintenanceTypeFilter}
+              onChange={(e) => changeType(e.target.value)}
+              className="bg-white border border-slate-300 rounded px-2 py-1 text-sm"
+            >
+              <option value="">Todos</option>
+              <option value="CORRETIVA">Corretiva</option>
+              <option value="PREVENTIVA">Preventiva</option>
             </select>
           </label>
           <button
@@ -113,16 +139,26 @@ export function ShiftReport({ shift, date, activities, pending }: Props) {
                 <div key={a.id} className="border border-slate-200 rounded-lg p-4 mb-3">
                   <div className="flex items-start justify-between mb-2">
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-base">{a.asset?.tag}</span>
                         <span className="text-xs text-slate-500">OM {a.om_number}</span>
                         <span className={`text-xs px-2 py-0.5 rounded border ${STATUS_CLASS[a.status as keyof typeof STATUS_CLASS]}`}>
                           {STATUS_LABEL[a.status as keyof typeof STATUS_LABEL]}
                         </span>
+                        {a.maintenance_type && (
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded border ${MAINT_TYPE_CLASS[a.maintenance_type as MaintenanceType] || ''}`}>
+                            {MAINT_TYPE_LABEL[a.maintenance_type as MaintenanceType]}
+                          </span>
+                        )}
+                        {a._origin === 'worked' && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 border border-purple-300 inline-flex items-center gap-1">
+                            <Undo2 size={10} /> Aberta no turno {a.shift}
+                          </span>
+                        )}
                       </div>
                       <div className="text-xs text-slate-500 mt-0.5">
-                        {formatTime(a.opened_at)}
-                        {a.closed_at ? ` -> ${formatTime(a.closed_at)}` : ' (em andamento)'}
+                        Abertura: {formatDateTime(a.opened_at)}
+                        {a.closed_at ? ` -> Fechada: ${formatDateTime(a.closed_at)}` : ' (em andamento)'}
                       </div>
                     </div>
                     {a.photos?.length > 0 && (
@@ -250,4 +286,9 @@ function KPICard({ n, label, color }: { n: number; label: string; color: string 
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatDateTime(iso: string) {
+  const d = new Date(iso);
+  return `${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
 }
