@@ -1,9 +1,11 @@
 'use client';
 
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { Camera, Plus, Trash2, Save } from 'lucide-react';
+import { Camera, Plus, Trash2, Save, RotateCcw } from 'lucide-react';
+
+const DRAFT_KEY = 'campoiq:nova:draft';
 import {
   SYMPTOMS,
   CAUSES,
@@ -59,6 +61,7 @@ export function ActivityForm({ assets, systems, subsystems }: Props) {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [draftRestored, setDraftRestored] = useState(false);
 
   const [tag, setTag] = useState('');
   const [om, setOm] = useState('');
@@ -86,6 +89,63 @@ export function ActivityForm({ assets, systems, subsystems }: Props) {
   const [partsText, setPartsText] = useState('');
   const [photos, setPhotos] = useState<File[]>([]);
   const [observations, setObservations] = useState<ObsDraft[]>([]);
+
+  // Carrega rascunho salvo após hidratação (evita mismatch SSR)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (!raw) return;
+      const d = JSON.parse(raw);
+      if (d.tag)              setTag(d.tag);
+      if (d.om)               setOm(d.om);
+      if (d.openedAt)         setOpenedAt(d.openedAt);
+      if (d.shift)            setShift(d.shift);
+      if (d.maintenanceType)  setMaintenanceType(d.maintenanceType);
+      if (d.systemId)         setSystemId(d.systemId);
+      if (d.systemOther)      setSystemOther(d.systemOther);
+      if (d.subsystemId)      setSubsystemId(d.subsystemId);
+      if (d.subsystemOther)   setSubsystemOther(d.subsystemOther);
+      if (d.symptom)          setSymptom(d.symptom);
+      if (d.symptomOther)     setSymptomOther(d.symptomOther);
+      if (d.cause)            setCause(d.cause);
+      if (d.causeOther)       setCauseOther(d.causeOther);
+      if (d.intervention)     setIntervention(d.intervention);
+      if (d.interventionOther) setInterventionOther(d.interventionOther);
+      if (d.description)      setDescription(d.description);
+      if (d.performedBy)      setPerformedBy(d.performedBy);
+      if (d.status)           setStatus(d.status);
+      if (d.partsText)        setPartsText(d.partsText);
+      if (d.observations?.length) setObservations(d.observations);
+      if (d.tag || d.om || d.description) setDraftRestored(true);
+    } catch {
+      // localStorage corrompido — ignora
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Salva rascunho a cada mudança
+  useEffect(() => {
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({
+        tag, om, openedAt, shift, maintenanceType,
+        systemId, systemOther, subsystemId, subsystemOther,
+        symptom, symptomOther, cause, causeOther, intervention, interventionOther,
+        description, performedBy, status, partsText, observations,
+      }));
+    } catch { /* storage cheio ou privado */ }
+  }, [tag, om, openedAt, shift, maintenanceType,
+      systemId, systemOther, subsystemId, subsystemOther,
+      symptom, symptomOther, cause, causeOther, intervention, interventionOther,
+      description, performedBy, status, partsText, observations]);
+
+  function clearDraft() {
+    localStorage.removeItem(DRAFT_KEY);
+    setTag(''); setOm(''); setOpenedAt(localISO(new Date())); setShift(inferShift(new Date()));
+    setMaintenanceType('CORRETIVA'); setSystemId(''); setSystemOther('');
+    setSubsystemId(''); setSubsystemOther(''); setSymptom(''); setSymptomOther('');
+    setCause(''); setCauseOther(''); setIntervention(''); setInterventionOther('');
+    setDescription(''); setPerformedBy(''); setStatus('EM_EXECUCAO');
+    setPartsText(''); setPhotos([]); setObservations([]); setDraftRestored(false);
+  }
 
   const subOptions = useMemo(
     () => subsystems.filter((s) => s.system_id === systemId),
@@ -166,7 +226,7 @@ export function ActivityForm({ assets, systems, subsystems }: Props) {
           shift,
           maintenance_type: maintenanceType,
           opened_at: opened.toISOString(),
-          closed_at: status === 'CONCLUIDO' ? new Date().toISOString() : null,
+          closed_at: status === 'CONCLUIDO' ? opened.toISOString() : null,
           worked_in_shifts: [shift],
           worked_in_dates: [openedDateISO],
           last_action_shift: shift,
@@ -248,6 +308,7 @@ export function ActivityForm({ assets, systems, subsystems }: Props) {
         }
       }
 
+      localStorage.removeItem(DRAFT_KEY);
       router.push('/kanban');
       router.refresh();
     } catch (err: any) {
@@ -261,6 +322,19 @@ export function ActivityForm({ assets, systems, subsystems }: Props) {
       onSubmit={handleSubmit}
       className="bg-white rounded-lg shadow-sm border border-slate-200 p-4 space-y-4"
     >
+      {draftRestored && (
+        <div className="bg-blue-50 border border-blue-200 text-blue-800 text-sm p-2 rounded flex items-center justify-between">
+          <span>📋 Rascunho restaurado — seus dados anteriores foram recuperados.</span>
+          <button
+            type="button"
+            onClick={clearDraft}
+            className="ml-3 text-xs text-blue-600 underline whitespace-nowrap flex items-center gap-1"
+          >
+            <RotateCcw size={12} /> Limpar rascunho
+          </button>
+        </div>
+      )}
+
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-800 text-sm p-2 rounded">{error}</div>
       )}
@@ -613,13 +687,24 @@ export function ActivityForm({ assets, systems, subsystems }: Props) {
         </div>
       </div>
 
-      <button
-        type="submit"
-        disabled={saving}
-        className="w-full bg-orange-600 hover:bg-orange-700 disabled:bg-slate-400 text-white font-semibold py-3 rounded text-base flex items-center justify-center gap-2"
-      >
-        <Save size={18} /> {saving ? 'Salvando...' : 'Registrar atividade'}
-      </button>
+      <div className="flex gap-2">
+        <button
+          type="submit"
+          disabled={saving}
+          className="flex-1 bg-orange-600 hover:bg-orange-700 disabled:bg-slate-400 text-white font-semibold py-3 rounded text-base flex items-center justify-center gap-2"
+        >
+          <Save size={18} /> {saving ? 'Salvando...' : 'Registrar atividade'}
+        </button>
+        <button
+          type="button"
+          onClick={clearDraft}
+          disabled={saving}
+          title="Limpar formulário e rascunho salvo"
+          className="px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded border border-slate-300 flex items-center gap-1 text-sm"
+        >
+          <RotateCcw size={16} /> Limpar
+        </button>
+      </div>
     </form>
   );
 }
