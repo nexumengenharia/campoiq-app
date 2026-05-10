@@ -7,9 +7,7 @@ export const revalidate = 0;
 export default async function KanbanPage() {
   const supabase = createClient();
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const isoStart = new Date(today.getTime() - 24 * 60 * 60 * 1000).toISOString();
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
   const { data: wos } = await supabase
     .from('work_orders')
@@ -20,7 +18,8 @@ export default async function KanbanPage() {
       maintenance_actions(description, performed_by),
       photos(id)
     `)
-    .gte('opened_at', isoStart)
+    // Bug 6: 7 dias de janela + sempre inclui ativos pendentes/em andamento independente da data
+    .or(`opened_at.gte.${sevenDaysAgo},status.in.(PENDENTE,EM_EXECUCAO,AGUARDANDO_PECA)`)
     .order('opened_at', { ascending: false });
 
   return (

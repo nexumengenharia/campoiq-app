@@ -3,9 +3,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { Camera, Plus, Trash2, Save, RotateCcw } from 'lucide-react';
-
-const DRAFT_KEY = 'campoiq:nova:draft';
+import { Camera, Plus, Trash2, Save, RotateCcw, X } from 'lucide-react';
 import {
   SYMPTOMS,
   CAUSES,
@@ -26,6 +24,8 @@ import type {
   Shift,
   MaintenanceType,
 } from '@/lib/types';
+
+const DRAFT_KEY = 'campoiq:nova:draft';
 
 type Props = {
   assets: any[];
@@ -210,8 +210,24 @@ export function ActivityForm({ assets, systems, subsystems }: Props) {
     try {
       const supabase = createClient();
 
-      const asset = assets.find((a) => a.tag === tag.trim());
+      // Bug 5: comparação case-insensitive
+      const asset = assets.find((a) => a.tag.toLowerCase() === tag.trim().toLowerCase());
       if (!asset) throw new Error(`Ativo com tag "${tag}" nao encontrado.`);
+
+      // Bug 2: valida campos de falha — se qualquer um foi tocado, todos devem estar preenchidos
+      const sysVal = systemId === OTHER ? systemOther.trim() : systemId;
+      const subVal = subsystemId === OTHER ? subsystemOther.trim() : subsystemId;
+      const symVal = symptom === OTHER ? symptomOther.trim() : symptom;
+      const cauVal = cause === OTHER ? causeOther.trim() : cause;
+      const intVal = intervention === OTHER ? interventionOther.trim() : intervention;
+      const anyFailureField = sysVal || subVal || symVal || cauVal || intVal;
+      if (anyFailureField) {
+        if (!sysVal)  throw new Error('Preencha o campo Sistema para registrar os dados de falha ISO 14224.');
+        if (!subVal)  throw new Error('Preencha o campo Subsistema para registrar os dados de falha ISO 14224.');
+        if (!symVal)  throw new Error('Preencha o Sintoma para registrar os dados de falha ISO 14224.');
+        if (!cauVal)  throw new Error('Preencha a Causa para registrar os dados de falha ISO 14224.');
+        if (!intVal)  throw new Error('Preencha o tipo de Intervencao para registrar os dados de falha ISO 14224.');
+      }
 
       const opened = new Date(openedAt);
       const openedDateISO = opened.toISOString().slice(0, 10);
@@ -240,20 +256,15 @@ export function ActivityForm({ assets, systems, subsystems }: Props) {
       const sysId = await ensureSystem(supabase);
       const subId = sysId ? await ensureSubsystem(supabase, sysId) : null;
 
-      // 3) Resolve Sintoma / Causa / Intervencao (sem tabela - texto direto)
-      const finalSymptom = symptom === OTHER ? symptomOther.trim() : symptom;
-      const finalCause = cause === OTHER ? causeOther.trim() : cause;
-      const finalIntervention = intervention === OTHER ? interventionOther.trim() : intervention;
-
-      // 4) Cria failure_event
-      if (sysId && subId && finalSymptom && finalCause && finalIntervention) {
+      // 4) Cria failure_event (sysVal/subVal/symVal/cauVal/intVal já validados acima)
+      if (sysId && subId && symVal && cauVal && intVal) {
         await supabase.from('failure_events').insert({
           work_order_id: wo.id,
           system_id: sysId,
           subsystem_id: subId,
-          symptom: finalSymptom,
-          presumed_cause: finalCause,
-          intervention_type: finalIntervention,
+          symptom: symVal,
+          presumed_cause: cauVal,
+          intervention_type: intVal,
         });
       }
 
@@ -312,7 +323,12 @@ export function ActivityForm({ assets, systems, subsystems }: Props) {
       router.push('/kanban');
       router.refresh();
     } catch (err: any) {
-      setError(err.message || 'Erro ao salvar.');
+      // Bug 4: erro legível para OM duplicada (código PostgreSQL 23505)
+      const isDuplicate = err.code === '23505' || err.message?.includes('duplicate key');
+      const msg = isDuplicate
+        ? 'Número de OM já cadastrado. Verifique o número e tente novamente.'
+        : err.message || 'Erro ao salvar.';
+      setError(msg);
       setSaving(false);
     }
   }
@@ -654,8 +670,19 @@ export function ActivityForm({ assets, systems, subsystems }: Props) {
         {photos.length > 0 && (
           <div className="flex gap-2 mt-2 flex-wrap">
             {photos.map((f, i) => (
-              <div key={i} className="w-16 h-16 rounded border border-slate-300 bg-gradient-to-br from-slate-200 to-slate-400 flex items-center justify-center text-white font-bold text-[10px] text-center px-1">
-                {f.name.slice(0, 8)}
+              // Bug 3: botão X para remover foto individualmente
+              <div key={i} className="relative w-16 h-16">
+                <div className="w-full h-full rounded border border-slate-300 bg-gradient-to-br from-slate-200 to-slate-400 flex items-center justify-center text-white font-bold text-[10px] text-center px-1">
+                  {f.name.slice(0, 8)}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPhotos((prev) => prev.filter((_, idx) => idx !== i))}
+                  className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow"
+                  title="Remover foto"
+                >
+                  <X size={11} />
+                </button>
               </div>
             ))}
           </div>

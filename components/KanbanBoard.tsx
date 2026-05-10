@@ -19,9 +19,7 @@ export function KanbanBoard({ initialWOs }: Props) {
     const channel = supabase
       .channel('kanban-live')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'work_orders' }, async () => {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const isoStart = new Date(today.getTime() - 24 * 60 * 60 * 1000).toISOString();
+        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
         const { data } = await supabase
           .from('work_orders')
           .select(`
@@ -31,7 +29,7 @@ export function KanbanBoard({ initialWOs }: Props) {
             maintenance_actions(description, performed_by),
             photos(id)
           `)
-          .gte('opened_at', isoStart)
+          .or(`opened_at.gte.${sevenDaysAgo},status.in.(PENDENTE,EM_EXECUCAO,AGUARDANDO_PECA)`)
           .order('opened_at', { ascending: false });
         if (data) setWos(data);
       })
